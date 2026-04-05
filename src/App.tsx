@@ -688,6 +688,7 @@ export default function App() {
   };
 
   const [isDownloadingPDF, setIsDownloadingPDF] = useState(false);
+  const [isDownloadingZip, setIsDownloadingZip] = useState(false);
 
   const handleDownloadAudio = () => {
     if (audioUrl) {
@@ -795,6 +796,38 @@ export default function App() {
       link.click();
     } catch (error) {
       console.error("Failed to rasterize SVG:", error);
+    }
+  };
+
+  const handleDownloadStorylineZip = async () => {
+    if (!result || result.type !== 'storyline') return;
+    setIsDownloadingZip(true);
+    
+    try {
+      const JSZip = (await import('jszip')).default;
+      const { saveAs } = await import('file-saver');
+      const zip = new JSZip();
+      
+      const scenes = result.data.scenes;
+      const brandName = brandGuidelines.name.toLowerCase().replace(/\s+/g, '-');
+      
+      for (let i = 0; i < scenes.length; i++) {
+        const scene = scenes[i];
+        if (scene.image) {
+          // Extract base64 data from data URL
+          const base64Data = scene.image.split(',')[1];
+          const fileName = `${brandName}-scene-${i + 1}.png`;
+          zip.file(fileName, base64Data, { base64: true });
+        }
+      }
+      
+      const content = await zip.generateAsync({ type: 'blob' });
+      saveAs(content, `${brandName}-storyline-${Date.now()}.zip`);
+    } catch (error) {
+      console.error("Failed to generate ZIP:", error);
+      alert("Failed to generate ZIP archive. Please try again.");
+    } finally {
+      setIsDownloadingZip(false);
     }
   };
 
@@ -1319,6 +1352,8 @@ export default function App() {
                           URL.revokeObjectURL(url);
                         } else if (result.type === 'slideshow') {
                           handleDownloadPDF();
+                        } else if (result.type === 'storyline') {
+                          handleDownloadStorylineZip();
                         }
                       }}
                       className="flex items-center gap-2 text-xs font-bold text-slate-900 dark:text-white hover:opacity-80 transition-all"
@@ -1693,11 +1728,30 @@ export default function App() {
 
                     {result.type === 'storyline' && (
                       <div className="w-full max-w-6xl space-y-12">
-                        <div className="text-center space-y-4">
-                          <h2 className="text-4xl font-light tracking-tight text-slate-900 dark:text-slate-100">
-                            {result.data.storyTitle}
-                          </h2>
-                          <div className="w-24 h-1 bg-slate-900 dark:bg-white mx-auto rounded-full" />
+                        <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+                          <div className="space-y-4 text-center md:text-left">
+                            <h2 className="text-4xl font-light tracking-tight text-slate-900 dark:text-slate-100">
+                              {result.data.storyTitle}
+                            </h2>
+                            <div className="w-24 h-1 bg-slate-900 dark:bg-white rounded-full mx-auto md:mx-0" />
+                          </div>
+                          <button 
+                            onClick={handleDownloadStorylineZip}
+                            disabled={isDownloadingZip}
+                            className="bg-slate-900 dark:bg-white text-white dark:text-slate-900 px-6 py-3 rounded-sm font-bold tracking-widest uppercase text-xs hover:bg-slate-800 dark:hover:bg-slate-100 transition-colors flex items-center gap-3 shadow-xl disabled:opacity-50"
+                          >
+                            {isDownloadingZip ? (
+                              <>
+                                <Loader2 size={16} className="animate-spin" />
+                                PREPARING ZIP...
+                              </>
+                            ) : (
+                              <>
+                                <Download size={16} />
+                                Download All Scenes (ZIP)
+                              </>
+                            )}
+                          </button>
                         </div>
                         
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
@@ -1714,12 +1768,28 @@ export default function App() {
                                 aspectRatio === '1:1' ? 'aspect-square' : (aspectRatio === '9:16' ? 'aspect-[9/16]' : 'aspect-video')
                               )}>
                                 {scene.image ? (
-                                  <img 
-                                    src={scene.image} 
-                                    alt={scene.chapterTitle}
-                                    className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
-                                    referrerPolicy="no-referrer"
-                                  />
+                                  <>
+                                    <img 
+                                      src={scene.image} 
+                                      alt={scene.chapterTitle}
+                                      className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                                      referrerPolicy="no-referrer"
+                                    />
+                                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                      <button 
+                                        onClick={() => {
+                                          const link = document.createElement('a');
+                                          link.href = scene.image;
+                                          link.download = `${brandGuidelines.name.toLowerCase().replace(/\s+/g, '-')}-storyline-scene-${index + 1}-${Date.now()}`;
+                                          link.click();
+                                        }}
+                                        className="bg-white text-slate-900 px-4 py-2 rounded-sm font-bold shadow-xl flex items-center gap-2 transform translate-y-4 group-hover:translate-y-0 transition-transform text-xs"
+                                      >
+                                        <Download size={14} />
+                                        Download
+                                      </button>
+                                    </div>
+                                  </>
                                 ) : (
                                   <div className="absolute inset-0 flex items-center justify-center">
                                     <div className="flex flex-col items-center gap-3">

@@ -102,7 +102,8 @@ export type GemType = 'image' | 'video' | 'text' | 'slideshow' | 'campaign' | 's
 
 export const IMAGE_MODELS = [
   { id: 'gemini-2.5-flash-image', name: 'Standard', description: 'Fast generation, good for ideation' },
-  { id: 'gemini-3.1-flash-image-preview', name: 'High Quality', description: 'Best for final brand creatives' }
+  { id: 'gemini-3.1-flash-image-preview', name: 'High Quality', description: 'Best for final brand creatives' },
+  { id: 'imagen-4.0-generate-001', name: 'Imagen 4.0', description: 'State-of-the-art photorealistic images' }
 ];
 
 export const TEXT_MODELS = [
@@ -609,7 +610,7 @@ export async function generateCreative(gem: Gem, prompt: string, config?: {
             data: supportedLogo.data
           }
         });
-        parts[0].text += "\n\nIMPORTANT: Use the provided logo image as the definitive brand mark. Incorporate it into the creative EXACTLY ONCE. Place it as a clear, well-positioned overlay with a transparent background that blends seamlessly into the scene—DO NOT place it inside a box, label, or rounded rectangle.";
+        parts[0].text += "\n\nIMPORTANT: Use the provided logo image as the definitive brand mark. Incorporate it into the creative EXACTLY ONCE. The logo MUST be a clean, transparent overlay with NO background box, border, or container. It should blend naturally into the scene as if it were part of the environment or a high-end watermark. ABSOLUTELY NO grey, white, or colored background squares around the logo.";
       }
     }
 
@@ -656,13 +657,14 @@ export async function generateCreative(gem: Gem, prompt: string, config?: {
   
   if (gem.type === 'campaign') {
     const ai = getAI();
-    const modelId = config?.model || 'gemini-3.1-flash-lite-preview';
+    const logicModelId = 'gemini-3.1-flash-lite-preview';
+    const imageModelId = config?.model || 'gemini-2.5-flash-image';
     const parts: any[] = [{ text: `${gem.systemInstruction}\n${guidelinesContext}\n\nPrompt: ${prompt}` }];
     
     await appendAssetsToParts(parts);
 
     const response = await withRetry(() => ai.models.generateContent({
-      model: modelId,
+      model: logicModelId,
       contents: { parts },
       config: {
         systemInstruction: `${gem.systemInstruction}\n\nSTRICT RULES: Your task is to generate a concise, professional marketing campaign in JSON format. You MUST NOT include any internal monologue, thinking process, or conversational text. Return ONLY the JSON object. Keep all values extremely concise and avoid any repetitive or nonsensical strings.`,
@@ -690,35 +692,9 @@ export async function generateCreative(gem: Gem, prompt: string, config?: {
     }
 
     const imagePromises = result.imagePrompts.slice(0, 3).map(async (imgPrompt: string) => {
-      const imgParts: any[] = [{ text: `Brand Guidelines:\n${guidelinesContext}\n\nCampaign Image Prompt: ${imgPrompt}` }];
-      
-      if (config?.guidelines?.logo) {
-        const supportedLogo = await getSupportedLogoData(config.guidelines.logo);
-        if (supportedLogo) {
-          imgParts.push({
-            inlineData: {
-              mimeType: supportedLogo.mimeType,
-              data: supportedLogo.data
-            }
-          });
-          imgParts[0].text += "\n\nIMPORTANT: Use the provided logo image as the definitive brand mark. Incorporate it into the creative EXACTLY ONCE. Place it as a clear, well-positioned overlay with a transparent background that blends seamlessly into the scene—DO NOT place it inside a box, label, or rounded rectangle.";
-        }
-      }
-
-      await appendAssetsToParts(imgParts);
-
       try {
-        const imgResponse = await withRetry(() => ai.models.generateContent({
-          model: 'gemini-2.5-flash-image',
-          contents: { parts: imgParts },
-          config: {
-            imageConfig: { aspectRatio: "16:9" }
-          }
-        }));
-        const imagePart = imgResponse.candidates?.[0]?.content?.parts.find(p => p.inlineData);
-        if (imagePart?.inlineData) {
-          return `data:image/png;base64,${imagePart.inlineData.data}`;
-        }
+        const imageResult = await generateImage(imgPrompt, config?.guidelines, "16:9", imageModelId, config?.assets);
+        return imageResult.url;
       } catch (e) {
         console.error("Failed to generate one of the campaign images:", e);
       }
@@ -817,7 +793,7 @@ export async function generateCreative(gem: Gem, prompt: string, config?: {
       
       Create a highly detailed visual prompt for the Veo video model. Focus on clean cinematography, hyper-realistic 3D product shots, sophisticated lighting, and smooth camera movements.
       CRITICAL: Avoid cluttered, chaotic, or over-the-top VFX. Keep the composition minimal, premium, and focused entirely on the product's essence. Less is more.
-      CRITICAL: The visual prompt MUST describe the brand logo appearing naturally on the product packaging. Do NOT describe it as a floating overlay if it's already on the product. Avoid visual redundancy. Ensure the logo has a transparent background and blends into its surroundings without any boxy borders or labels.
+      CRITICAL: The visual prompt MUST describe the brand logo appearing naturally on the product packaging. Do NOT describe it as a floating overlay if it's already on the product. Avoid visual redundancy. The logo MUST be a clean, transparent overlay with NO background box, border, or container. It should blend naturally into the scene as if it were part of the environment or a high-end watermark. ABSOLUTELY NO grey, white, or colored background squares around the logo.
       Also provide a 1-line voice-over (VO) and a music style recommendation that fits this video.
       
       ${guidelinesContext}
@@ -883,7 +859,7 @@ export async function generateCreative(gem: Gem, prompt: string, config?: {
 
   if (gem.type === 'slideshow') {
     const ai = getAI();
-    const modelId = config?.model || 'gemini-3.1-flash-lite-preview';
+    const logicModelId = 'gemini-3.1-flash-lite-preview';
     const parts: any[] = [{ text: `Generate a single professional corporate presentation slide based on this prompt: ${prompt}.
       ${guidelinesContext}
       Use Google Search to find real facts, figures, and details relevant to the brand.
@@ -902,14 +878,14 @@ export async function generateCreative(gem: Gem, prompt: string, config?: {
             data: supportedLogo.data
           }
         });
-        parts[0].text += "\n\nIMPORTANT: Use the provided logo image as the definitive brand mark. Ensure it is integrated into the presentation design conceptually. Place it as a clear, well-positioned element with a transparent background—DO NOT place it inside a box, label, or rounded rectangle.";
+        parts[0].text += "\n\nIMPORTANT: Use the provided logo image as the definitive brand mark. Ensure it is integrated into the presentation design conceptually. The logo MUST be a clean, transparent overlay with NO background box, border, or container. It should be well-positioned and blend seamlessly—ABSOLUTELY NO grey, white, or colored background squares around the logo.";
       }
     }
 
     await appendAssetsToParts(parts, config?.assets);
 
     const response = await withRetry(() => ai.models.generateContent({
-      model: modelId,
+      model: logicModelId,
       contents: { parts },
       config: {
         systemInstruction: `${gem.systemInstruction}\n\nSTRICT RULES: Your task is to generate a concise, professional presentation slide in JSON format. You MUST NOT include any internal monologue, thinking process, or conversational text. Return ONLY the JSON object. Keep all values extremely concise and avoid any repetitive or nonsensical strings.`,
@@ -943,14 +919,14 @@ export async function generateCreative(gem: Gem, prompt: string, config?: {
 
   if (gem.type === 'storyline') {
     const ai = getAI();
-    const modelId = config?.model || 'gemini-3.1-flash-lite-preview';
+    const logicModelId = 'gemini-3.1-flash-lite-preview';
     const parts: any[] = [{ text: `Generate a 6-8 image progressive storyline based on this prompt: ${prompt}.
       ${guidelinesContext}
       Provide a storyTitle and a list of scenes, each with a chapterTitle, narrative, and a detailed imagePrompt.
       Return as a JSON object.` }];
 
     const response = await withRetry(() => ai.models.generateContent({
-      model: modelId,
+      model: logicModelId,
       contents: { parts },
       config: {
         systemInstruction: `${gem.systemInstruction}\n\nSTRICT RULES: Your task is to generate a concise, professional storyline in JSON format. You MUST NOT include any internal monologue, thinking process, or conversational text. Return ONLY the JSON object.`,
@@ -1011,7 +987,7 @@ export async function generateImage(prompt: string, guidelines?: BrandGuidelines
           data: supportedLogo.data
         }
       });
-      parts[0].text += "\n\nIMPORTANT: Use the provided logo image as the definitive brand mark. Incorporate it into the creative EXACTLY ONCE. Place it as a clear, well-positioned overlay with a transparent background that blends seamlessly into the scene—DO NOT place it inside a box, label, or rounded rectangle.";
+      parts[0].text += "\n\nIMPORTANT: Use the provided logo image as the definitive brand mark. Incorporate it into the creative EXACTLY ONCE. The logo MUST be a clean, transparent overlay with NO background box, border, or container. It should blend naturally into the scene as if it were part of the environment or a high-end watermark. ABSOLUTELY NO grey, white, or colored background squares around the logo.";
     }
   }
 
@@ -1019,6 +995,27 @@ export async function generateImage(prompt: string, guidelines?: BrandGuidelines
 
   const ai = getAI();
   const modelId = model || 'gemini-2.5-flash-image';
+  const isImagen = modelId.startsWith('imagen-');
+
+  if (isImagen) {
+    const response = await withRetry(() => ai.models.generateImages({
+      model: modelId,
+      prompt: `You are a Lead Visual Designer. Create a high-quality, professional corporate background image.\n${guidelinesContext}\n\nPrompt: ${prompt}\n\nIMPORTANT: The image MUST be clean and professional. ABSOLUTELY NO text, labels, or boxy borders around the brand elements.`,
+      config: {
+        numberOfImages: 1,
+        aspectRatio: (aspectRatio as any) || "16:9",
+        outputMimeType: 'image/jpeg'
+      }
+    }));
+
+    if (response.generatedImages?.[0]?.image?.imageBytes) {
+      return {
+        url: `data:image/jpeg;base64,${response.generatedImages[0].image.imageBytes}`
+      };
+    }
+    throw new Error("No image generated by Imagen");
+  }
+
   const supportsSearch = modelId === 'gemini-3.1-flash-image-preview' || modelId === 'gemini-3-pro-image-preview';
   const supportsImageSize = supportsSearch;
   
