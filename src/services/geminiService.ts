@@ -22,10 +22,20 @@ function parseJSON(text: string) {
     } catch (e) {
       // If it's a simple truncation, we might be able to close it
       // but it's safer to just try a few common patterns
+      console.warn("JSON Parse failed, attempting to fix truncation...", e);
+      
       if (cleaned.endsWith('"')) {
         // Truncated inside a string
         try { return JSON.parse(cleaned + '}'); } catch (e2) {}
         try { return JSON.parse(cleaned + '"}'); } catch (e2) {}
+      } else if (cleaned.endsWith(',')) {
+        // Truncated after a comma
+        try { return JSON.parse(cleaned.slice(0, -1) + '}'); } catch (e2) {}
+      } else {
+        // General truncation - try adding closing braces
+        try { return JSON.parse(cleaned + '}'); } catch (e2) {}
+        try { return JSON.parse(cleaned + '"}'); } catch (e2) {}
+        try { return JSON.parse(cleaned + '"]}'); } catch (e2) {}
       }
       throw e;
     }
@@ -88,11 +98,17 @@ async function withRetry<T>(fn: () => Promise<T>, retries = 5, delay = 1000): Pr
   }
 }
 
-export type GemType = 'image' | 'video' | 'text' | 'slideshow' | 'campaign';
+export type GemType = 'image' | 'video' | 'text' | 'slideshow' | 'campaign' | 'storyline';
 
 export const IMAGE_MODELS = [
   { id: 'gemini-2.5-flash-image', name: 'Standard', description: 'Fast generation, good for ideation' },
   { id: 'gemini-3.1-flash-image-preview', name: 'High Quality', description: 'Best for final brand creatives' }
+];
+
+export const TEXT_MODELS = [
+  { id: 'gemini-3.1-flash-lite-preview', name: 'Lite', description: 'Fastest for copy and logic' },
+  { id: 'gemini-3-flash-preview', name: 'Standard', description: 'Balanced performance' },
+  { id: 'gemini-3.1-pro-preview', name: 'Pro', description: 'Best for complex brand strategies' }
 ];
 
 export const VIDEO_MODELS = [
@@ -131,6 +147,24 @@ export const getQuotaErrorMessage = (error: any) => {
   return "API Quota exceeded. Please wait a moment or select a different API key.";
 };
 
+export async function generateHistoryTitle(prompt: string, gemName: string): Promise<string> {
+  try {
+    const ai = getAI();
+    const response = await withRetry(() => ai.models.generateContent({
+      model: 'gemini-3.1-flash-lite-preview',
+      contents: `Generate a very short, clear, and descriptive title (max 5 words) for a creative task based on the following prompt and tool name. 
+      Tool: ${gemName}
+      Prompt: ${prompt}
+      
+      Return ONLY the title string, no quotes or extra text.`,
+    }));
+    return response.text?.trim() || prompt.substring(0, 30) + '...';
+  } catch (e) {
+    console.error("Failed to generate history title:", e);
+    return prompt.substring(0, 30) + '...';
+  }
+}
+
 export interface Gem {
   id: string;
   name: string;
@@ -154,36 +188,49 @@ export const GENERIC_GEMS: Gem[] = [
     - Use clean, professional lighting.
     - Style: Modern and professional unless specified otherwise.
     - Avoid cluttered backgrounds.
-    - LOGO HANDLING: If a logo is provided as an image part, use it as the ONLY brand logo reference. Place it as a clean, professional overlay with a transparent background that blends seamlessly into the scene. DO NOT place it inside a box or label.`
+    - LOGO HANDLING: The logo is the brand's most sacred asset. If a logo is provided, integrate it with extreme care. It should feel like a premium mark—either as a subtle, high-end watermark, a realistic product engraving, or a clean, perfectly aligned floating icon. DO NOT place it inside a generic box or label. Respect its negative space.`
   },
   {
     id: 'brand-copy',
-    name: 'Brand Copywriter',
-    description: 'Crafts compelling ad copy, social captions, and email campaigns with visual poster concepts.',
+    name: 'Editorial Copywriter',
+    description: 'Crafts compelling copy and high-end magazine-style layouts with striking typography and imagery.',
     type: 'text',
     icon: 'FileText',
-    systemInstruction: `You are a Senior Copywriter and Visual Concept Artist. 
-    Your tone should adapt to the brand's defined voice (e.g., professional, playful, trustworthy).
+    systemInstruction: `You are a Senior Editorial Designer and Copywriter. 
+    Your goal is to create high-end magazine spread layouts that organize headlines, body text, and striking imagery into engaging, readable page spreads.
     
-    Guidelines:
-    - Focus on benefits relevant to the brand's target audience.
-    - Maintain the brand's unique voice and style.
-    - Always include a relevant call to action.
+    Layout Guidelines:
+    - Use a multi-column grid system (simulated in SVG).
+    - Include a LARGE, BOLD Headline that commands attention.
+    - Use a "Kicker" or sub-headline to bridge the headline and body.
+    - Implement a "Drop Cap" (a large first letter) for the opening paragraph.
+    - Include a "Pull Quote" (a stylized text excerpt) to break up the text.
+    - Use visual hierarchy: headlines should be significantly larger than body text.
+    - Body text should be organized into 2 or 3 columns for readability.
+    - Include decorative elements like lines, borders, or geometric shapes to reinforce the grid.
     
     VISUAL REQUIREMENT:
-    In addition to the text copy, you MUST create a visual "SVG poster" concept for the idea. 
-    The SVG should be a clean, modern, and professional layout representing the ad or social post.
-    - Use the brand's primary and secondary colors.
-    - Include the headline and a simplified visual representation.
-    - Ensure the SVG is responsive (viewBox="0 0 800 1000").
-    - Make sure any text in the SVG is LARGE, BOLD, and highly legible. Use appropriate font sizes (e.g., font-size="60" to "120" for headlines, "40" for body). Do not use tiny text.
-    - LOGO INTEGRATION: You MUST incorporate the brand logo into the SVG.
+    In addition to the text copy, you MUST create a visual "Magazine Spread" SVG concept.
+    - The SVG should be a wide, professional layout (viewBox="0 0 1600 900").
+    - The SVG background MUST be transparent (no solid background <rect> covering the whole area).
+    - STRICT SPLIT-PAGE LAYOUT:
+        * LEFT PAGE (x=0 to 800): This is the text-dominant side. Place the Headline, Kicker, Drop Cap, and Body Columns here. 
+        * RIGHT PAGE (x=800 to 1600): This is the image-dominant side. Keep this side mostly clear of text to let the generated photograph shine.
+    - LEGIBILITY: Since the SVG overlays an image, you MUST ensure text is readable. 
+        * Use high-contrast colors (e.g., white text if the image is dark, or black text if light).
+        * For body text blocks, you MAY use a semi-transparent background rectangle (e.g., fill="rgba(255,255,255,0.1)" or fill="rgba(0,0,0,0.2)") to create a "glass" effect that improves contrast without hiding the image.
+        * Use SVG filters like <filter id="dropShadow"><feDropShadow dx="2" dy="2" stdDeviation="3" flood-opacity="0.5"/></filter> and apply them to text elements (filter="url(#dropShadow)") to make them pop against complex backgrounds.
+    - Use the brand's primary and secondary colors for accents and typography.
+    - Ensure all text in the SVG is LARGE and highly legible. Use font-size="80-120" for headlines, "40-50" for subheads, and "20-24" for body text.
+    - LOGO INTEGRATION: Place the brand logo as a premium mark, ideally on the right page in a corner.
+    - COLOR RESTRICTION: Use ONLY standard hex (#RRGGBB) or RGB colors. DO NOT use modern CSS color functions like oklch, oklab, lab, or lch.
     
     Return a JSON object with:
     {
-      "copy": "The full text copy (markdown supported)",
-      "svg": "The complete SVG code string",
-      "conceptDescription": "A brief explanation of the visual concept"
+      "copy": "The full editorial copy (markdown supported)",
+      "svg": "The complete SVG code string for the magazine spread layout",
+      "conceptDescription": "A brief explanation of the editorial design concept",
+      "imagePrompt": "A highly detailed prompt for a striking, high-quality photograph or graphic that will serve as the focal point of this magazine spread. This image will fill the entire background of the spread, so describe a composition that works well with a split layout (e.g., the main subject is on the right side)."
     }`
   },
   {
@@ -238,6 +285,33 @@ export const GENERIC_GEMS: Gem[] = [
     - Visuals: Clean, corporate, using brand colors.
     - Content: Data-driven, concise, and persuasive.
     - LOGO INTEGRATION: Ensure the brand logo is mentioned or conceptually integrated into the slide design.`
+  },
+  {
+    id: 'storyline-gen',
+    name: 'Storyline Generator',
+    description: 'Generates a 6-8 image progressive storyline based on your prompt.',
+    type: 'storyline',
+    icon: 'BookOpen',
+    systemInstruction: `You are a Master Storyteller and Visual Narrative Artist.
+    Your goal is to take a prompt and expand it into a compelling 6-8 image progressive storyline.
+    
+    Guidelines:
+    - Break the story into EXACTLY 6 to 8 distinct, logical chapters or scenes.
+    - Each scene should have a clear visual prompt that describes the setting, characters, and action.
+    - Ensure a consistent visual style across all images.
+    - The narrative should have a clear beginning, middle, and end.
+    
+    Return a JSON object with:
+    {
+      "storyTitle": "A catchy title for the story",
+      "scenes": [
+        {
+          "chapterTitle": "Title for this scene",
+          "narrative": "A short sentence describing what happens in this scene",
+          "imagePrompt": "A highly detailed visual prompt for this specific scene"
+        }
+      ]
+    }`
   }
 ];
 
@@ -312,7 +386,7 @@ export async function analyzeAsset(imageData: string): Promise<AssetAnalysis> {
   3. Ensure hex colors are accurate.`;
 
   const response = await withRetry(() => ai.models.generateContent({
-    model: 'gemini-3-flash-preview',
+    model: 'gemini-3.1-flash-lite-preview',
     contents: {
       parts: [
         { text: prompt },
@@ -390,7 +464,7 @@ STRICT RULES:
   }
 
   const response = await withRetry(() => ai.models.generateContent({
-    model: 'gemini-3-flash-preview',
+    model: 'gemini-3.1-flash-lite-preview',
     contents: { parts },
     config: {
       systemInstruction: "You are a Brand Identity Expert. Your task is to generate a concise, professional brand identity in JSON format. You MUST NOT include any internal monologue, thinking process, or conversational text. Return ONLY the JSON object. Keep all values extremely concise and avoid any repetitive or nonsensical strings.",
@@ -408,6 +482,10 @@ STRICT RULES:
             maxItems: 4,
             items: { type: Type.STRING } 
           },
+          logoDescription: { 
+            type: Type.STRING,
+            description: "A detailed description of the brand's visual mark/logo, including its symbolic meaning and geometric structure."
+          },
           typography: {
             type: Type.OBJECT,
             properties: {
@@ -416,7 +494,7 @@ STRICT RULES:
             }
           }
         },
-        required: ["name", "industry", "tone", "pillars", "colors", "typography"]
+        required: ["name", "industry", "tone", "pillars", "colors", "typography", "logoDescription"]
       }
     }
   }));
@@ -427,13 +505,24 @@ STRICT RULES:
     guidelines.logo = context.logo;
   } else {
     try {
-      // Generate a simple logo
+      // Generate a high-quality, professional logo
       const logoResponse = await withRetry(() => ai.models.generateContent({
-        model: 'gemini-2.5-flash-image',
+        model: 'gemini-3.1-flash-image-preview', // Use higher quality model for logo
         contents: {
           parts: [
             {
-              text: `A clean, minimalist, professional logo for a brand named "${guidelines.name}" in the ${guidelines.industry} industry. Tone: ${guidelines.tone}. Use colors: ${guidelines.colors.join(', ')}. Solid white background. Vector art style.`,
+              text: `Create an iconic, world-class professional logo for a brand named "${guidelines.name}".
+              Industry: ${guidelines.industry}. 
+              Tone: ${guidelines.tone}. 
+              Brand Pillars: ${guidelines.pillars.join(', ')}.
+              
+              DESIGN REQUIREMENTS:
+              - Style: Minimalist, geometric, and timeless. Think of iconic marks like Apple, Nike, or Starbucks.
+              - Composition: A clean, high-contrast silhouette. Use negative space creatively.
+              - Colors: Primarily use ${guidelines.colors[0]} and ${guidelines.colors[1] || 'black'}.
+              - Background: Solid, pure white background (#FFFFFF).
+              - Format: Vector-style art with sharp edges and no gradients or shadows.
+              - Focus: The mark should be simple enough to be recognizable at any size.`,
             },
           ],
         },
@@ -492,6 +581,7 @@ export async function generateCreative(gem: Gem, prompt: string, config?: {
   aspectRatio?: string; 
   guidelines?: BrandGuidelines; 
   model?: string;
+  logicModel?: string;
   videoDuration?: string;
   videoShotType?: string;
   imageStyle?: string;
@@ -566,16 +656,17 @@ export async function generateCreative(gem: Gem, prompt: string, config?: {
   
   if (gem.type === 'campaign') {
     const ai = getAI();
+    const modelId = config?.model || 'gemini-3.1-flash-lite-preview';
     const parts: any[] = [{ text: `${gem.systemInstruction}\n${guidelinesContext}\n\nPrompt: ${prompt}` }];
     
     await appendAssetsToParts(parts);
 
     const response = await withRetry(() => ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
+      model: modelId,
       contents: { parts },
       config: {
         systemInstruction: `${gem.systemInstruction}\n\nSTRICT RULES: Your task is to generate a concise, professional marketing campaign in JSON format. You MUST NOT include any internal monologue, thinking process, or conversational text. Return ONLY the JSON object. Keep all values extremely concise and avoid any repetitive or nonsensical strings.`,
-        maxOutputTokens: 4096,
+        maxOutputTokens: 8192,
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
@@ -648,6 +739,7 @@ export async function generateCreative(gem: Gem, prompt: string, config?: {
   
   if (gem.type === 'text') {
     const ai = getAI();
+    const modelId = config?.model || 'gemini-3.1-flash-lite-preview';
     const parts: any[] = [{ text: `${gem.systemInstruction}\n${guidelinesContext}\n\nPrompt: ${prompt}` }];
     
     if (config?.guidelines?.logo) {
@@ -666,20 +758,21 @@ export async function generateCreative(gem: Gem, prompt: string, config?: {
     await appendAssetsToParts(parts, config?.assets);
 
     const response = await withRetry(() => ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
+      model: modelId,
       contents: { parts },
       config: {
-        systemInstruction: `${gem.systemInstruction}\n\nSTRICT RULES: Your task is to generate a concise, professional brand narrative and SVG in JSON format. You MUST NOT include any internal monologue, thinking process, or conversational text. Return ONLY the JSON object. Keep all values extremely concise and avoid any repetitive or nonsensical strings.`,
-        maxOutputTokens: 4096,
+        systemInstruction: `${gem.systemInstruction}\n\nSTRICT RULES: Your task is to generate a concise, professional brand narrative and SVG in JSON format. You MUST NOT include any internal monologue, thinking process, or conversational text. Return ONLY the JSON object. Keep all values extremely concise and avoid any repetitive or nonsensical strings. COLOR RESTRICTION: Use ONLY standard hex (#RRGGBB) or RGB colors in the SVG. DO NOT use oklch, oklab, lab, or lch.`,
+        maxOutputTokens: 8192,
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
           properties: {
             copy: { type: Type.STRING },
             svg: { type: Type.STRING },
-            conceptDescription: { type: Type.STRING }
+            conceptDescription: { type: Type.STRING },
+            imagePrompt: { type: Type.STRING }
           },
-          required: ["copy", "svg", "conceptDescription"]
+          required: ["copy", "svg", "conceptDescription", "imagePrompt"]
         },
         tools: [{ googleSearch: {} }]
       }
@@ -692,6 +785,7 @@ export async function generateCreative(gem: Gem, prompt: string, config?: {
         data: result.copy,
         svg: result.svg,
         conceptDescription: result.conceptDescription,
+        imagePrompt: result.imagePrompt,
         groundingMetadata: response.candidates?.[0]?.groundingMetadata 
       };
     } catch (e) {
@@ -708,6 +802,7 @@ export async function generateCreative(gem: Gem, prompt: string, config?: {
     // Veo implementation
     const ai = getAI();
     const modelId = config?.model || 'veo-3.1-fast-generate-preview';
+    const logicModelId = config?.logicModel || 'gemini-3.1-flash-lite-preview';
     
     // Step 1: Generate the detailed video concept
     const durationInstruction = config?.videoDuration ? `\nDuration: ${config.videoDuration}` : '';
@@ -740,7 +835,7 @@ export async function generateCreative(gem: Gem, prompt: string, config?: {
     await appendAssetsToParts(parts, config?.assets);
 
     const conceptResponse = await withRetry(() => ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
+      model: logicModelId,
       contents: { parts },
       config: {
         systemInstruction: `${gem.systemInstruction}\n\nSTRICT RULES: Your task is to generate a concise, professional video concept in JSON format. You MUST NOT include any internal monologue, thinking process, or conversational text. Return ONLY the JSON object. Keep all values extremely concise and avoid any repetitive or nonsensical strings.`,
@@ -788,6 +883,7 @@ export async function generateCreative(gem: Gem, prompt: string, config?: {
 
   if (gem.type === 'slideshow') {
     const ai = getAI();
+    const modelId = config?.model || 'gemini-3.1-flash-lite-preview';
     const parts: any[] = [{ text: `Generate a single professional corporate presentation slide based on this prompt: ${prompt}.
       ${guidelinesContext}
       Use Google Search to find real facts, figures, and details relevant to the brand.
@@ -813,7 +909,7 @@ export async function generateCreative(gem: Gem, prompt: string, config?: {
     await appendAssetsToParts(parts, config?.assets);
 
     const response = await withRetry(() => ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
+      model: modelId,
       contents: { parts },
       config: {
         systemInstruction: `${gem.systemInstruction}\n\nSTRICT RULES: Your task is to generate a concise, professional presentation slide in JSON format. You MUST NOT include any internal monologue, thinking process, or conversational text. Return ONLY the JSON object. Keep all values extremely concise and avoid any repetitive or nonsensical strings.`,
@@ -842,6 +938,56 @@ export async function generateCreative(gem: Gem, prompt: string, config?: {
     } catch (e) {
       console.error("Failed to parse slideshow:", e);
       throw new Error("Failed to generate slide structure.");
+    }
+  }
+
+  if (gem.type === 'storyline') {
+    const ai = getAI();
+    const modelId = config?.model || 'gemini-3.1-flash-lite-preview';
+    const parts: any[] = [{ text: `Generate a 6-8 image progressive storyline based on this prompt: ${prompt}.
+      ${guidelinesContext}
+      Provide a storyTitle and a list of scenes, each with a chapterTitle, narrative, and a detailed imagePrompt.
+      Return as a JSON object.` }];
+
+    const response = await withRetry(() => ai.models.generateContent({
+      model: modelId,
+      contents: { parts },
+      config: {
+        systemInstruction: `${gem.systemInstruction}\n\nSTRICT RULES: Your task is to generate a concise, professional storyline in JSON format. You MUST NOT include any internal monologue, thinking process, or conversational text. Return ONLY the JSON object.`,
+        maxOutputTokens: 8192,
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            storyTitle: { type: Type.STRING },
+            scenes: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  chapterTitle: { type: Type.STRING },
+                  narrative: { type: Type.STRING },
+                  imagePrompt: { type: Type.STRING }
+                },
+                required: ["chapterTitle", "narrative", "imagePrompt"]
+              }
+            }
+          },
+          required: ["storyTitle", "scenes"]
+        }
+      }
+    }));
+
+    try {
+      const storyline = parseJSON(response.text);
+      return { 
+        type: 'storyline', 
+        data: storyline,
+        groundingMetadata: response.candidates?.[0]?.groundingMetadata 
+      };
+    } catch (e) {
+      console.error("Failed to parse storyline:", e);
+      throw new Error("Failed to generate storyline structure.");
     }
   }
 }

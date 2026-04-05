@@ -37,7 +37,8 @@ import {
   Settings2,
   SlidersHorizontal,
   Moon,
-  Sun
+  Sun,
+  BookOpen
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { motion, AnimatePresence } from 'motion/react';
@@ -45,7 +46,7 @@ import { BrandLogo } from './components/BrandLogo';
 import { GroundingSources } from './components/GroundingSources';
 import { SlideshowDisplay } from './components/SlideshowDisplay';
 import { AssetLibrary, type Asset } from './components/AssetLibrary';
-import { GENERIC_GEMS, Gem, generateCreative, pollVideo, BrandGuidelines, generateImage, generateTTS, setCustomApiKey, IMAGE_MODELS, VIDEO_MODELS, getQuotaErrorMessage, generateBrandIdentity } from './services/geminiService';
+import { GENERIC_GEMS, Gem, generateCreative, pollVideo, BrandGuidelines, generateImage, generateTTS, setCustomApiKey, IMAGE_MODELS, VIDEO_MODELS, TEXT_MODELS, getQuotaErrorMessage, generateBrandIdentity, generateHistoryTitle } from './services/geminiService';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -66,6 +67,7 @@ interface HistoryItem {
   id: string;
   gemId: string;
   prompt: string;
+  title?: string;
   result: any;
   timestamp: number;
 }
@@ -80,6 +82,8 @@ const BrandSetup = ({ onComplete }: BrandSetupProps) => {
   const [initColors, setInitColors] = useState('');
   const [initTone, setInitTone] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [generatedGuidelines, setGeneratedGuidelines] = useState<BrandGuidelines | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -103,7 +107,13 @@ const BrandSetup = ({ onComplete }: BrandSetupProps) => {
         colors: initColors || undefined,
         tone: initTone || undefined
       });
-      onComplete(guidelines);
+      setGeneratedGuidelines(guidelines);
+      setShowSuccess(true);
+      
+      // Delay to show the rewarding success state
+      setTimeout(() => {
+        onComplete(guidelines);
+      }, 3000);
     } catch (err: any) {
       console.error(err);
       setError(err.message || "Failed to generate brand identity. Please try again.");
@@ -114,125 +124,185 @@ const BrandSetup = ({ onComplete }: BrandSetupProps) => {
 
   return (
     <div className="h-screen flex bg-white dark:bg-slate-950 overflow-hidden">
-      {/* Left Side - Premium Visual */}
-      <div className="hidden lg:flex lg:w-1/2 relative bg-slate-900 overflow-hidden items-end p-16">
-        <div className="absolute inset-0">
-          <img 
-            src="https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=2564&auto=format&fit=crop" 
-            alt="Abstract premium background" 
-            className="w-full h-full object-cover opacity-40 mix-blend-luminosity"
-            referrerPolicy="no-referrer"
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-900/80 to-transparent" />
-        </div>
-        
-        <div className="relative z-10 max-w-lg">
-          <div className="w-12 h-12 bg-white text-slate-900 flex items-center justify-center mb-8 rounded-sm">
-            <div className="w-4 h-4 bg-slate-900 rounded-full" />
-          </div>
-          <h1 className="text-4xl font-light text-white tracking-tight mb-4 leading-tight">
-            Enterprise <br/><span className="font-bold">Creative Suite</span>
-          </h1>
-          <p className="text-base text-slate-400 font-light leading-relaxed">
-            Powered by Gemini. Define your brand's strategic parameters to unlock tailored, high-impact campaigns and visual assets.
-          </p>
-        </div>
-      </div>
-
-      {/* Right Side - Form */}
-      <div className="w-full lg:w-1/2 flex items-center justify-center p-6 sm:p-10 lg:p-16 bg-white dark:bg-slate-950 overflow-y-auto">
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="w-full max-w-md space-y-8"
-        >
-          <div className="space-y-3">
-            <h2 className="text-3xl font-bold text-slate-900 dark:text-white tracking-tight">Brand Initialization</h2>
-            <p className="text-slate-500 dark:text-slate-400">Enter your brand's core description to generate a complete identity system.</p>
-          </div>
-
-          <div className="space-y-6">
-            <div className="space-y-2">
-              <label className="text-xs font-bold text-slate-900 dark:text-slate-300 uppercase tracking-widest">Strategic Brief</label>
-              <textarea 
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="e.g., A sustainable luxury skincare brand focused on organic ingredients and minimalist packaging for urban professionals."
-                className="w-full h-24 bg-transparent border-b-2 border-slate-200 dark:border-slate-800 focus:border-slate-900 dark:focus:border-white p-0 py-2 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none transition-colors resize-none text-base font-light"
-              />
-            </div>
-
-            {error && (
-              <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-900/50 rounded-sm flex items-center gap-3 text-red-600 dark:text-red-400 text-xs">
-                <AlertCircle size={16} />
-                {error}
-              </div>
-            )}
-
-            <div className="space-y-4 pt-4 border-t border-slate-100 dark:border-slate-800">
-              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Optional Context</p>
-              
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
-                <div className="space-y-2 sm:col-span-2">
-                  <label className="text-[10px] font-bold text-slate-900 dark:text-slate-300 uppercase tracking-widest flex items-center gap-2">
-                    <ImageIcon size={12} /> Logo
-                  </label>
-                  <input 
-                    type="file" 
-                    accept="image/*"
-                    onChange={handleLogoUpload}
-                    className="w-full text-[10px] text-slate-500 file:mr-4 file:py-1.5 file:px-3 file:rounded-sm file:border-0 file:text-[10px] file:font-semibold file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200 dark:file:bg-slate-800 dark:file:text-slate-300 dark:hover:file:bg-slate-700 transition-colors"
-                  />
-                  {initLogo && <p className="text-[10px] text-green-600 dark:text-green-400">Logo uploaded.</p>}
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-slate-900 dark:text-slate-300 uppercase tracking-widest flex items-center gap-2">
-                    <SlidersHorizontal size={12} /> Colors
-                  </label>
-                  <input 
-                    type="text"
-                    value={initColors}
-                    onChange={(e) => setInitColors(e.target.value)}
-                    placeholder="e.g., Navy, Gold"
-                    className="w-full bg-transparent border-b border-slate-200 dark:border-slate-800 focus:border-slate-900 dark:focus:border-white p-0 py-1 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none transition-colors text-xs"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-slate-900 dark:text-slate-300 uppercase tracking-widest flex items-center gap-2">
-                    <FileText size={12} /> Tone
-                  </label>
-                  <input 
-                    type="text"
-                    value={initTone}
-                    onChange={(e) => setInitTone(e.target.value)}
-                    placeholder="e.g., Professional"
-                    className="w-full bg-transparent border-b border-slate-200 dark:border-slate-800 focus:border-slate-900 dark:focus:border-white p-0 py-1 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none transition-colors text-xs"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <button 
-              onClick={handleGenerate}
-              disabled={isGenerating || !description.trim()}
-              className="w-full bg-slate-900 dark:bg-white text-white dark:text-slate-900 py-4 rounded-sm font-bold tracking-widest uppercase text-xs hover:bg-slate-800 dark:hover:bg-slate-100 transition-colors disabled:opacity-50 flex items-center justify-center gap-3"
+      <AnimatePresence mode="wait">
+        {showSuccess && generatedGuidelines ? (
+          <motion.div 
+            key="success"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-white dark:bg-slate-950 p-6 text-center"
+          >
+            <motion.div
+              initial={{ scale: 0.5, opacity: 0, rotate: -10 }}
+              animate={{ scale: 1, opacity: 1, rotate: 0 }}
+              transition={{ type: "spring", stiffness: 200, damping: 15 }}
+              className="mb-12"
             >
-              {isGenerating ? (
-                <>
-                  <Loader2 className="animate-spin" size={18} />
-                  PROCESSING...
-                </>
-              ) : (
-                <>
-                  GENERATE IDENTITY
-                </>
-              )}
-            </button>
+              <div className="relative group">
+                <div className="absolute -inset-8 bg-gradient-to-r from-slate-200 to-slate-100 dark:from-slate-800 dark:to-slate-900 rounded-full blur-2xl opacity-50 animate-pulse"></div>
+                <BrandLogo 
+                  customLogo={generatedGuidelines.logo} 
+                  brandName={generatedGuidelines.name} 
+                  className="h-48 w-48 relative z-10" 
+                />
+              </div>
+            </motion.div>
+            
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.4 }}
+              className="space-y-4"
+            >
+              <h2 className="text-4xl font-bold text-slate-900 dark:text-white tracking-tight">
+                Identity Established
+              </h2>
+              <p className="text-xl text-slate-500 dark:text-slate-400 font-light">
+                Welcome to the <span className="font-bold text-slate-900 dark:text-white">{generatedGuidelines.name}</span> Creative Suite.
+              </p>
+            </motion.div>
+
+            <motion.div 
+              className="mt-12 flex gap-2"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 1 }}
+            >
+              {[0, 1, 2].map((i) => (
+                <motion.div
+                  key={i}
+                  animate={{ scale: [1, 1.5, 1], opacity: [0.3, 1, 0.3] }}
+                  transition={{ repeat: Infinity, duration: 1.5, delay: i * 0.2 }}
+                  className="w-2 h-2 bg-slate-900 dark:bg-white rounded-full"
+                />
+              ))}
+            </motion.div>
+          </motion.div>
+        ) : (
+          <div className="w-full h-full flex">
+            {/* Left Side - Premium Visual */}
+            <div className="hidden lg:flex lg:w-1/2 relative bg-slate-900 overflow-hidden items-end p-16">
+              <div className="absolute inset-0">
+                <img 
+                  src="https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=2564&auto=format&fit=crop" 
+                  alt="Abstract premium background" 
+                  className="w-full h-full object-cover opacity-40 mix-blend-luminosity"
+                  referrerPolicy="no-referrer"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-900/80 to-transparent" />
+              </div>
+              
+              <div className="relative z-10 max-w-lg">
+                <div className="w-12 h-12 bg-white text-slate-900 flex items-center justify-center mb-8 rounded-sm">
+                  <div className="w-4 h-4 bg-slate-900 rounded-full" />
+                </div>
+                <h1 className="text-4xl font-light text-white tracking-tight mb-4 leading-tight">
+                  Enterprise <br/><span className="font-bold">Creative Suite</span>
+                </h1>
+                <p className="text-base text-slate-400 font-light leading-relaxed">
+                  Powered by Gemini. Define your brand's strategic parameters to unlock tailored, high-impact campaigns and visual assets.
+                </p>
+              </div>
+            </div>
+
+            {/* Right Side - Form */}
+            <div className="w-full lg:w-1/2 flex items-center justify-center p-6 sm:p-10 lg:p-16 bg-white dark:bg-slate-950 overflow-y-auto">
+              <motion.div 
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="w-full max-w-md space-y-8"
+              >
+                <div className="space-y-3">
+                  <h2 className="text-3xl font-bold text-slate-900 dark:text-white tracking-tight">Brand Initialization</h2>
+                  <p className="text-slate-500 dark:text-slate-400">Enter your brand's core description to generate a complete identity system.</p>
+                </div>
+
+                <div className="space-y-6">
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-900 dark:text-slate-300 uppercase tracking-widest">Strategic Brief</label>
+                    <textarea 
+                      value={description}
+                      onChange={(e) => setDescription(e.target.value)}
+                      placeholder="e.g., A sustainable luxury skincare brand focused on organic ingredients and minimalist packaging for urban professionals."
+                      className="w-full h-24 bg-transparent border-b-2 border-slate-200 dark:border-slate-800 focus:border-slate-900 dark:focus:border-white p-0 py-2 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none transition-colors resize-none text-base font-light"
+                    />
+                  </div>
+
+                  {error && (
+                    <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-900/50 rounded-sm flex items-center gap-3 text-red-600 dark:text-red-400 text-xs">
+                      <AlertCircle size={16} />
+                      {error}
+                    </div>
+                  )}
+
+                  <div className="space-y-4 pt-4 border-t border-slate-100 dark:border-slate-800">
+                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Optional Context</p>
+                    
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
+                      <div className="space-y-2 sm:col-span-2">
+                        <label className="text-[10px] font-bold text-slate-900 dark:text-slate-300 uppercase tracking-widest flex items-center gap-2">
+                          <ImageIcon size={12} /> Logo
+                        </label>
+                        <input 
+                          type="file" 
+                          accept="image/*"
+                          onChange={handleLogoUpload}
+                          className="w-full text-[10px] text-slate-500 file:mr-4 file:py-1.5 file:px-3 file:rounded-sm file:border-0 file:text-[10px] file:font-semibold file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200 dark:file:bg-slate-800 dark:file:text-slate-300 dark:hover:file:bg-slate-700 transition-colors"
+                        />
+                        {initLogo && <p className="text-[10px] text-green-600 dark:text-green-400">Logo uploaded.</p>}
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-bold text-slate-900 dark:text-slate-300 uppercase tracking-widest flex items-center gap-2">
+                          <SlidersHorizontal size={12} /> Colors
+                        </label>
+                        <input 
+                          type="text"
+                          value={initColors}
+                          onChange={(e) => setInitColors(e.target.value)}
+                          placeholder="e.g., Navy, Gold"
+                          className="w-full bg-transparent border-b border-slate-200 dark:border-slate-800 focus:border-slate-900 dark:focus:border-white p-0 py-1 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none transition-colors text-xs"
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-bold text-slate-900 dark:text-slate-300 uppercase tracking-widest flex items-center gap-2">
+                          <FileText size={12} /> Tone
+                        </label>
+                        <input 
+                          type="text"
+                          value={initTone}
+                          onChange={(e) => setInitTone(e.target.value)}
+                          placeholder="e.g., Professional"
+                          className="w-full bg-transparent border-b border-slate-200 dark:border-slate-800 focus:border-slate-900 dark:focus:border-white p-0 py-1 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none transition-colors text-xs"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <button 
+                    onClick={handleGenerate}
+                    disabled={isGenerating || !description.trim()}
+                    className="w-full bg-slate-900 dark:bg-white text-white dark:text-slate-900 py-4 rounded-sm font-bold tracking-widest uppercase text-xs hover:bg-slate-800 dark:hover:bg-slate-100 transition-colors disabled:opacity-50 flex items-center justify-center gap-3"
+                  >
+                    {isGenerating ? (
+                      <>
+                        <Loader2 className="animate-spin" size={18} />
+                        PROCESSING...
+                      </>
+                    ) : (
+                      <>
+                        GENERATE IDENTITY
+                      </>
+                    )}
+                  </button>
+                </div>
+              </motion.div>
+            </div>
           </div>
-        </motion.div>
-      </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
@@ -285,6 +355,16 @@ export default function App() {
     }
   }, [brandGuidelines.colors]);
 
+  useEffect(() => {
+    if (selectedGem.type === 'image') {
+      setSelectedModel(IMAGE_MODELS[0].id);
+    } else if (selectedGem.type === 'video') {
+      setSelectedModel(VIDEO_MODELS[0].id);
+    } else {
+      setSelectedModel(TEXT_MODELS[0].id);
+    }
+  }, [selectedGem]);
+
   const [currentSlide, setCurrentSlide] = useState(0);
   const [isTTSLoading, setIsTTSLoading] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -313,9 +393,9 @@ export default function App() {
   const [slideshowFont, setSlideshowFont] = useState<'sans' | 'serif'>('sans');
 
   // New Generation Controls
-  const [videoDuration, setVideoDuration] = useState<'5s' | '7s'>('5s');
-  const [videoShotType, setVideoShotType] = useState<'Single Shot' | 'Multi-Shot Sequence' | 'Cinematic Storytelling'>('Cinematic Storytelling');
-  const [imageStyle, setImageStyle] = useState<'Photorealistic' | '3D Render' | 'Minimalist' | 'Vibrant'>('Photorealistic');
+  const [videoDuration, setVideoDuration] = useState<'5s' | '7s'>('7s');
+  const [videoShotType, setVideoShotType] = useState<'Single Shot' | 'Multi-Shot Sequence' | 'Cinematic Storytelling'>('Single Shot');
+  const [imageStyle, setImageStyle] = useState<string>('Photorealistic');
   const [voiceEmotion, setVoiceEmotion] = useState<'Neutral' | 'Cheerful' | 'Energetic' | 'Professional' | 'Calming'>('Professional');
 
   useEffect(() => {
@@ -410,13 +490,15 @@ export default function App() {
       setSelectedModel(IMAGE_MODELS[0].id);
     } else if (selectedGem.type === 'video') {
       setSelectedModel(VIDEO_MODELS[0].id);
-      if (aspectRatio === '1:1' || aspectRatio === '4:3') {
-        setAspectRatio('16:9');
-      }
+      setAspectRatio('9:16');
+      setVideoDuration('7s');
+      setVideoShotType('Single Shot');
+    } else if (selectedGem.type === 'text' || selectedGem.type === 'campaign' || selectedGem.type === 'slideshow') {
+      setSelectedModel(TEXT_MODELS[0].id);
     } else {
       setSelectedModel('');
     }
-  }, [selectedGem.id, aspectRatio]);
+  }, [selectedGem.id]);
 
   const handleGenerate = async () => {
     if (!prompt.trim()) return;
@@ -497,8 +579,50 @@ export default function App() {
         }
       } else {
         setResult(res);
-        addToHistory(res, selectedGem.id, fullPrompt);
         setIsGenerating(false);
+
+        if (res?.type === 'storyline') {
+          const originalGemId = selectedGem.id;
+          const originalPrompt = fullPrompt;
+          const storyline = res.data;
+          
+          // Generate images for each scene sequentially
+          const updatedScenes = [...storyline.scenes];
+          
+          for (let i = 0; i < updatedScenes.length; i++) {
+            try {
+              const imageResult = await generateImage(updatedScenes[i].imagePrompt, brandGuidelines, aspectRatio);
+              updatedScenes[i].image = imageResult.url;
+              
+              const currentRes = { ...res, data: { ...storyline, scenes: [...updatedScenes] } };
+              if (selectedGemIdRef.current === originalGemId) {
+                setResult(currentRes);
+              }
+            } catch (e) {
+              console.error(`Failed to generate image for scene ${i}:`, e);
+            }
+          }
+          
+          addToHistory({ ...res, data: { ...storyline, scenes: updatedScenes } }, originalGemId, originalPrompt);
+        } else if (res?.type === 'text' && res.imagePrompt) {
+          const originalGemId = selectedGem.id;
+          const originalPrompt = fullPrompt;
+          
+          try {
+            const imageResult = await generateImage(res.imagePrompt, brandGuidelines, "16:9");
+            const updatedRes = { ...res, imageUrl: imageResult.url };
+            
+            if (selectedGemIdRef.current === originalGemId) {
+              setResult(updatedRes);
+            }
+            addToHistory(updatedRes, originalGemId, originalPrompt);
+          } catch (e) {
+            console.error("Failed to generate image for editorial copy:", e);
+            addToHistory(res, originalGemId, originalPrompt);
+          }
+        } else {
+          addToHistory(res, selectedGem.id, fullPrompt);
+        }
       }
     } catch (error: any) {
       console.error(error);
@@ -719,15 +843,30 @@ export default function App() {
     }, 10000);
   };
 
-  const addToHistory = (res: any, specificGemId?: string, specificPrompt?: string) => {
+  const addToHistory = async (res: any, specificGemId?: string, specificPrompt?: string) => {
+    const gemId = specificGemId || selectedGem.id;
+    const promptText = specificPrompt || prompt;
+    const gem = GENERIC_GEMS.find(g => g.id === gemId);
+    
+    const id = Math.random().toString(36).substr(2, 9);
     const newItem: HistoryItem = {
-      id: Math.random().toString(36).substr(2, 9),
-      gemId: specificGemId || selectedGem.id,
-      prompt: specificPrompt || prompt,
+      id,
+      gemId,
+      prompt: promptText,
+      title: promptText.substring(0, 30) + '...',
       result: res,
       timestamp: Date.now()
     };
+    
     setHistory(prev => [newItem, ...prev].slice(0, 10));
+
+    // Generate a better title asynchronously
+    try {
+      const betterTitle = await generateHistoryTitle(promptText, gem?.name || 'Creative Tool');
+      setHistory(prev => prev.map(item => item.id === id ? { ...item, title: betterTitle } : item));
+    } catch (e) {
+      console.error("Failed to generate better title:", e);
+    }
   };
 
   const handleSelectGem = (gem: Gem) => {
@@ -766,6 +905,7 @@ export default function App() {
       case 'LayoutDashboard': return <LayoutDashboard size={20} />;
       case 'Presentation': return <Presentation size={20} />;
       case 'Target': return <Target size={20} />;
+      case 'BookOpen': return <BookOpen size={20} />;
       default: return <Sparkles size={20} />;
     }
   };
@@ -822,8 +962,31 @@ export default function App() {
           sidebarOpen ? "w-72" : "w-0 -translate-x-full lg:w-20 lg:translate-x-0"
         )}
       >
-        <div className="p-6 flex items-center gap-4 border-b border-slate-100 dark:border-slate-800 h-16 shrink-0">
-          {/* Empty space to align with header */}
+        <div className={cn(
+          "flex flex-col items-center border-b border-slate-100 dark:border-slate-800 shrink-0 transition-all duration-300",
+          sidebarOpen ? "p-8" : "p-4"
+        )}>
+          <BrandLogo 
+            collapsed={!sidebarOpen} 
+            customLogo={brandGuidelines.logo} 
+            brandName={brandGuidelines.name} 
+            className={cn(
+              "transition-all duration-500",
+              sidebarOpen ? "h-24 w-24 mb-4" : "h-10 w-10"
+            )} 
+          />
+          {sidebarOpen && (
+            <motion.div 
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="flex flex-col items-center text-center"
+            >
+              <span className="text-sm font-bold tracking-tight text-slate-900 dark:text-white whitespace-nowrap">
+                {brandGuidelines.name}
+              </span>
+              <p className="text-[9px] text-slate-500 font-medium tracking-widest uppercase mt-1">Creative Suite</p>
+            </motion.div>
+          )}
         </div>
 
         <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
@@ -896,7 +1059,7 @@ export default function App() {
                 )}
               >
                 <History size={16} className="shrink-0" />
-                {sidebarOpen && <span className="text-xs truncate">{item.prompt}</span>}
+                {sidebarOpen && <span className="text-xs truncate">{item.title || item.prompt}</span>}
               </button>
             ))}
           </div>
@@ -917,27 +1080,24 @@ export default function App() {
       <main className="flex-1 flex flex-col relative overflow-hidden">
         {/* Header */}
         <header className="h-16 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between px-6 shrink-0 relative">
-          <div className="flex items-center gap-4 z-10">
+          <div className="flex items-center z-10">
             <button 
               onClick={() => setSidebarOpen(!sidebarOpen)}
               className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-sm text-slate-500 dark:text-slate-400"
             >
               {sidebarOpen ? <X size={20} /> : <Menu size={20} />}
             </button>
-            <div className="flex items-center gap-2">
-              <span className="text-slate-400 dark:text-slate-500"><ChevronRight size={16} /></span>
-              <h2 className="font-semibold text-slate-800 dark:text-slate-200">{selectedGem.name}</h2>
-            </div>
           </div>
 
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <BrandLogo collapsed={false} customLogo={brandGuidelines.logo} brandName={brandGuidelines.name} className="h-10" />
-            <div className="flex flex-col justify-center ml-3 overflow-hidden text-left">
-              <span className="text-sm font-bold tracking-tight text-slate-900 dark:text-white whitespace-nowrap">
-                {brandGuidelines.name}
-              </span>
-              <p className="text-[9px] text-slate-500 font-medium tracking-widest uppercase mt-0.5">Creative Suite</p>
-            </div>
+            <motion.div 
+              key={selectedGem.id}
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="flex items-center gap-2"
+            >
+              <h2 className="font-semibold text-slate-800 dark:text-slate-200 text-lg">{selectedGem.name}</h2>
+            </motion.div>
           </div>
           
           <div className="flex items-center gap-4 z-10">
@@ -1020,7 +1180,7 @@ export default function App() {
                 {selectedGem.type !== 'text' && (
                   <div className="flex items-center gap-3 bg-white dark:bg-slate-900 p-2 rounded-sm border border-slate-200 dark:border-slate-800 shadow-sm">
                     <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 px-2 uppercase tracking-wider">Aspect Ratio</span>
-                    {(selectedGem.type === 'video' ? ['16:9', '9:16'] : ['1:1', '16:9', '9:16', '4:3']).map(ratio => (
+                    {(selectedGem.type === 'video' ? ['16:9', '9:16'] : (selectedGem.type === 'storyline' ? ['1:1', '16:9', '9:16'] : ['1:1', '16:9', '9:16', '4:3'])).map(ratio => (
                       <button
                         key={ratio}
                         onClick={() => setAspectRatio(ratio)}
@@ -1037,10 +1197,10 @@ export default function App() {
                   </div>
                 )}
 
-                  {(selectedGem.type === 'image' || selectedGem.type === 'video') && (
+                  {(selectedGem.type === 'image' || selectedGem.type === 'video' || selectedGem.type === 'text' || selectedGem.type === 'campaign' || selectedGem.type === 'slideshow' || selectedGem.type === 'storyline') && (
                     <div className="flex items-center gap-3 bg-white dark:bg-slate-900 p-2 rounded-sm border border-slate-200 dark:border-slate-800 shadow-sm">
                       <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 px-2 uppercase tracking-wider">Model Quality</span>
-                      {(selectedGem.type === 'image' ? IMAGE_MODELS : VIDEO_MODELS).map(model => (
+                      {(selectedGem.type === 'image' ? IMAGE_MODELS : (selectedGem.type === 'video' ? VIDEO_MODELS : TEXT_MODELS)).map(model => (
                         <button
                           key={model.id}
                           onClick={() => setSelectedModel(model.id)}
@@ -1099,22 +1259,15 @@ export default function App() {
                   )}
 
                   {selectedGem.type === 'image' && (
-                    <div className="flex items-center gap-3 bg-white dark:bg-slate-900 p-2 rounded-sm border border-slate-200 dark:border-slate-800 shadow-sm">
-                      <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 px-2 uppercase tracking-wider">Style</span>
-                      {(['Photorealistic', '3D Render', 'Minimalist', 'Vibrant'] as const).map(style => (
-                        <button
-                          key={style}
-                          onClick={() => setImageStyle(style)}
-                          className={cn(
-                            "px-3 py-1.5 rounded-sm text-xs font-bold transition-all border",
-                            imageStyle === style 
-                              ? "bg-slate-900 dark:bg-white text-white dark:text-slate-900 border-slate-900 dark:border-white" 
-                              : "border-transparent text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800"
-                          )}
-                        >
-                          {style}
-                        </button>
-                      ))}
+                    <div className="flex items-center gap-3 bg-white dark:bg-slate-900 p-2 rounded-sm border border-slate-200 dark:border-slate-800 shadow-sm flex-1 max-w-md">
+                      <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 px-2 uppercase tracking-wider shrink-0">Style</span>
+                      <input 
+                        type="text"
+                        value={imageStyle}
+                        onChange={(e) => setImageStyle(e.target.value)}
+                        placeholder="e.g., Photorealistic, 3D Render, Minimalist"
+                        className="flex-1 bg-transparent border-none focus:ring-0 text-xs font-bold text-slate-800 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-600"
+                      />
                     </div>
                   )}
 
@@ -1438,9 +1591,33 @@ export default function App() {
                             
                             <div 
                               ref={svgContainerRef}
-                              className="flex-1 bg-slate-50 dark:bg-slate-800 rounded-sm border border-slate-100 dark:border-slate-700 overflow-hidden shadow-inner flex items-center justify-center p-4 min-h-[400px] svg-container"
-                              dangerouslySetInnerHTML={{ __html: result.svg }}
-                            />
+                              className="flex-1 bg-white dark:bg-slate-900 rounded-sm border border-slate-100 dark:border-slate-800 overflow-hidden shadow-2xl relative aspect-video group/magazine"
+                            >
+                              {result.imageUrl && (
+                                <div className="absolute inset-0 z-0">
+                                  <img 
+                                    src={result.imageUrl} 
+                                    className="w-full h-full object-cover opacity-100" 
+                                    alt="Magazine Visual"
+                                    referrerPolicy="no-referrer"
+                                  />
+                                  <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent" />
+                                </div>
+                              )}
+                              <div 
+                                className="absolute inset-0 z-10 pointer-events-none"
+                                dangerouslySetInnerHTML={{ __html: result.svg.replace(/<svg([^>]*)>/, '<svg$1 style="width: 100%; height: 100%; display: block;">') }}
+                              />
+                              
+                              {!result.imageUrl && (
+                                <div className="absolute inset-0 flex items-center justify-center bg-slate-50 dark:bg-slate-800 animate-pulse">
+                                  <div className="flex flex-col items-center gap-3">
+                                    <Sparkles className="text-slate-300 dark:text-slate-600 animate-bounce" size={32} />
+                                    <p className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Generating Visual...</p>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
                             
                             {result.conceptDescription && (
                               <div className="p-4 bg-slate-100 dark:bg-slate-800 rounded-sm border border-slate-200 dark:border-slate-700">
@@ -1510,6 +1687,60 @@ export default function App() {
                               </div>
                             ))}
                           </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {result.type === 'storyline' && (
+                      <div className="w-full max-w-6xl space-y-12">
+                        <div className="text-center space-y-4">
+                          <h2 className="text-4xl font-light tracking-tight text-slate-900 dark:text-slate-100">
+                            {result.data.storyTitle}
+                          </h2>
+                          <div className="w-24 h-1 bg-slate-900 dark:bg-white mx-auto rounded-full" />
+                        </div>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
+                          {result.data.scenes.map((scene: any, index: number) => (
+                            <motion.div 
+                              key={index}
+                              initial={{ opacity: 0, y: 20 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              transition={{ delay: index * 0.1 }}
+                              className="space-y-6 group"
+                            >
+                              <div className={cn(
+                                "relative overflow-hidden rounded-sm shadow-lg border border-slate-100 dark:border-slate-800 bg-slate-100 dark:bg-slate-800",
+                                aspectRatio === '1:1' ? 'aspect-square' : (aspectRatio === '9:16' ? 'aspect-[9/16]' : 'aspect-video')
+                              )}>
+                                {scene.image ? (
+                                  <img 
+                                    src={scene.image} 
+                                    alt={scene.chapterTitle}
+                                    className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                                    referrerPolicy="no-referrer"
+                                  />
+                                ) : (
+                                  <div className="absolute inset-0 flex items-center justify-center">
+                                    <div className="flex flex-col items-center gap-3">
+                                      <Loader2 className="animate-spin text-slate-400" size={32} />
+                                      <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Generating Scene {index + 1}...</p>
+                                    </div>
+                                  </div>
+                                )}
+                                <div className="absolute top-4 left-4 bg-slate-900/80 backdrop-blur-sm text-white px-3 py-1 rounded-sm text-[10px] font-bold uppercase tracking-widest">
+                                  Scene {index + 1}
+                                </div>
+                              </div>
+                              
+                              <div className="space-y-2">
+                                <h3 className="text-xl font-bold text-slate-800 dark:text-slate-200">{scene.chapterTitle}</h3>
+                                <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed italic">
+                                  "{scene.narrative}"
+                                </p>
+                              </div>
+                            </motion.div>
+                          ))}
                         </div>
                       </div>
                     )}
